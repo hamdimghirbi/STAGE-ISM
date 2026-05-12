@@ -1,0 +1,17 @@
+{
+  "info": {
+    "name": "CRA Mock API — Local",
+    "description": "Local dev environment for the CRA Mock API. The token, current_month, event_id and expense_id variables are populated automatically by the E2E scenario; you can leave them blank when importing."
+  },
+  "variables": [
+    { "name": "base_url",      "value": "http://localhost:8000",  "enabled": true,  "description": "Mock API base URL" },
+    { "name": "email",         "value": "demo@cra.local",         "enabled": true,  "description": "Demo user (auto-seeded)" },
+    { "name": "password",      "value": "demo1234",               "enabled": true,  "description": "Demo password" },
+    { "name": "token",         "value": "",                       "enabled": true,  "description": "JWT — set by /api/auth/login" },
+    { "name": "current_month", "value": "",                       "enabled": true,  "description": "YYYY-MM — set by pre-script" },
+    { "name": "current_year",  "value": "",                       "enabled": true,  "description": "Year as int — set by pre-script" },
+    { "name": "today",         "value": "",                       "enabled": true,  "description": "YYYY-MM-DD — set by pre-script" },
+    { "name": "event_id",      "value": "",                       "enabled": true,  "description": "Set by Create Event step" },
+    { "name": "expense_id",    "value": "",                       "enabled": true,  "description": "Set by Create Expense step" }
+  ]
+}
