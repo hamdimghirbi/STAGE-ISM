@@ -1,0 +1,18 @@
+2026-05-12 11:30:11,566 - INFO - StreamableHTTP session manager started
+2026-05-12 11:30:14,382 - INFO - Created new transport with session ID: 31e95111f00442f38570b028c9fc2f86
+2026-05-12 11:30:14,412 - INFO - Processing request of type SetLevelRequest
+2026-05-12 11:30:17,508 - INFO - Processing request of type ListToolsRequest
+2026-05-12 11:30:19,920 - INFO - Processing request of type CallToolRequest
+2026-05-12 11:30:19,926 - WARNING - PING reçu
+2026-05-12 11:30:26,036 - INFO - Processing request of type CallToolRequest
+2026-05-12 11:30:26,037 - WARNING - PINGPING reçu: hi
+2026-05-12 11:30:29,673 - INFO - StreamableHTTP session manager shutting down
+2026-05-12 11:32:02,038 - INFO - StreamableHTTP session manager started
+2026-05-12 11:32:06,758 - INFO - Created new transport with session ID: 9136c4fec36948aaadabf459d3fd9c74
+2026-05-12 11:32:06,791 - INFO - Processing request of type SetLevelRequest
+2026-05-12 11:32:09,720 - INFO - Processing request of type ListToolsRequest
+2026-05-12 11:32:12,176 - INFO - Processing request of type CallToolRequest
+2026-05-12 11:32:12,181 - WARNING - PING reçu
+2026-05-12 11:32:18,329 - INFO - Processing request of type CallToolRequest
+2026-05-12 11:32:18,331 - WARNING - PINGPING reçu: hi
+2026-05-12 11:32:30,637 - INFO - StreamableHTTP session manager shutting down
