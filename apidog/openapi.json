@@ -1,0 +1,625 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CRA Mock API",
+    "version": "0.1.0",
+    "description": "Mock backend simulating the Cooptalite/Portalite portal pages: CRA (activity calendar), My Expenses, and My CRA Tracking. Used as a stable target for the CRA-Expenses-AI-Connector MCP server during development.\n\n**Demo credentials** (auto-seeded on first server start):\n- email: `demo@cra.local`\n- password: `demo1234`\n\n**Auth**: OAuth2 password flow at `POST /api/auth/login`, returns a JWT to be sent as `Authorization: Bearer <token>` on every protected endpoint.",
+    "contact": {
+      "name": "Hamdi MGHIRBI",
+      "url": "https://www.linkedin.com/in/mghirbihamdi"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local dev server"
+    }
+  ],
+  "tags": [
+    { "name": "auth", "description": "Login & current user" },
+    { "name": "cra", "description": "CRA day events + monthly submission & signature" },
+    { "name": "cra-tracking", "description": "Past months listing + signed client CRA upload" },
+    { "name": "expenses", "description": "Expense reports (notes de frais)" },
+    { "name": "meta", "description": "Health check & enum reference data" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "CraCategory": {
+        "type": "string",
+        "enum": ["Absence", "Travail"]
+      },
+      "CraActivity": {
+        "type": "string",
+        "enum": [
+          "Prestation", "HNO", "Astreinte",
+          "CP", "RTT", "Maladie", "Sans solde", "Autre"
+        ],
+        "description": "Travail: Prestation, HNO, Astreinte. Absence: CP, RTT, Maladie, Sans solde, Autre."
+      },
+      "ExpenseType": {
+        "type": "string",
+        "enum": [
+          "Indemnités kilométriques",
+          "Autre",
+          "Restaurant",
+          "Materiel",
+          "Titre de transport",
+          "Telephonie",
+          "Teletravail"
+        ]
+      },
+      "Status": {
+        "type": "string",
+        "enum": ["Draft", "Pending", "Verified", "Validated", "Rejected"]
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": ["member", "admin", "rh"]
+      },
+      "TokenResponse": {
+        "type": "object",
+        "required": ["access_token", "token_type"],
+        "properties": {
+          "access_token": { "type": "string" },
+          "token_type": { "type": "string", "default": "bearer" }
+        }
+      },
+      "UserOut": {
+        "type": "object",
+        "required": ["id", "email", "full_name", "role"],
+        "properties": {
+          "id": { "type": "integer" },
+          "email": { "type": "string", "format": "email" },
+          "full_name": { "type": "string" },
+          "role": { "$ref": "#/components/schemas/UserRole" }
+        }
+      },
+      "CraEventCreate": {
+        "type": "object",
+        "required": ["categorie", "activity", "start_date", "end_date"],
+        "properties": {
+          "categorie": { "$ref": "#/components/schemas/CraCategory" },
+          "activity":  { "$ref": "#/components/schemas/CraActivity" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date":   { "type": "string", "format": "date" },
+          "all_day":   { "type": "boolean", "default": false },
+          "nb":        { "type": "number", "minimum": 0, "exclusiveMinimum": true, "maximum": 1, "default": 1.0 },
+          "description": { "type": "string", "default": "" }
+        }
+      },
+      "CraEventUpdate": {
+        "type": "object",
+        "properties": {
+          "categorie": { "$ref": "#/components/schemas/CraCategory" },
+          "activity":  { "$ref": "#/components/schemas/CraActivity" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date":   { "type": "string", "format": "date" },
+          "all_day":   { "type": "boolean" },
+          "nb":        { "type": "number", "minimum": 0, "exclusiveMinimum": true, "maximum": 1 },
+          "description": { "type": "string" }
+        }
+      },
+      "CraEventOut": {
+        "type": "object",
+        "required": ["id", "user_id", "month", "categorie", "activity", "start_date", "end_date"],
+        "properties": {
+          "id": { "type": "integer" },
+          "user_id": { "type": "integer" },
+          "month": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$", "example": "2026-05" },
+          "categorie": { "$ref": "#/components/schemas/CraCategory" },
+          "activity":  { "$ref": "#/components/schemas/CraActivity" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date":   { "type": "string", "format": "date" },
+          "all_day":   { "type": "boolean" },
+          "nb":        { "type": "number" },
+          "description": { "type": "string" }
+        }
+      },
+      "CraMonthSubmit": {
+        "type": "object",
+        "properties": {
+          "description_tasks": { "type": "string", "default": "" },
+          "reserve_use_eur":   { "type": "number", "default": 0.0 },
+          "reserve_use_days":  { "type": "number", "default": 0.0 },
+          "reserve_save_eur":  { "type": "number", "default": 0.0 },
+          "reserve_save_days": { "type": "number", "default": 0.0 }
+        }
+      },
+      "CraMonthOut": {
+        "type": "object",
+        "required": ["id", "user_id", "month", "status"],
+        "properties": {
+          "id": { "type": "integer" },
+          "user_id": { "type": "integer" },
+          "month": { "type": "string", "example": "2026-05" },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "description_tasks": { "type": "string" },
+          "reserve_use_eur": { "type": "number" },
+          "reserve_use_days": { "type": "number" },
+          "reserve_save_eur": { "type": "number" },
+          "reserve_save_days": { "type": "number" },
+          "signature_path": { "type": "string", "nullable": true },
+          "client_cra_path": { "type": "string", "nullable": true },
+          "submitted_at": { "type": "string", "format": "date-time", "nullable": true },
+          "validated_at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "NoteFraisFilter": {
+        "type": "object",
+        "required": ["year"],
+        "properties": {
+          "year":   { "type": "integer", "example": 2026 },
+          "month":  { "type": "integer", "minimum": 1, "maximum": 12, "nullable": true },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "type":   { "$ref": "#/components/schemas/ExpenseType" },
+          "billable": { "type": "boolean", "nullable": true },
+          "page":  { "type": "integer", "minimum": 1, "default": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
+        }
+      },
+      "NoteFraisUpdate": {
+        "type": "object",
+        "properties": {
+          "type": { "$ref": "#/components/schemas/ExpenseType" },
+          "description": { "type": "string" },
+          "total_amount": { "type": "number", "exclusiveMinimum": true, "minimum": 0 },
+          "billable_to_client": { "type": "boolean" },
+          "comment": { "type": "string" }
+        }
+      },
+      "NoteFraisOut": {
+        "type": "object",
+        "required": ["id", "user_id", "month", "type", "total_amount", "status"],
+        "properties": {
+          "id": { "type": "integer" },
+          "user_id": { "type": "integer" },
+          "month": { "type": "string", "example": "2026-05" },
+          "type": { "$ref": "#/components/schemas/ExpenseType" },
+          "description": { "type": "string" },
+          "total_amount": { "type": "number" },
+          "billable_to_client": { "type": "boolean" },
+          "comment": { "type": "string" },
+          "receipt_path": { "type": "string", "nullable": true },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PageCraMonthOut": {
+        "type": "object",
+        "required": ["items", "total", "page", "pages", "limit"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/CraMonthOut" } },
+          "total": { "type": "integer" },
+          "page":  { "type": "integer" },
+          "pages": { "type": "integer" },
+          "limit": { "type": "integer" }
+        }
+      },
+      "PageNoteFraisOut": {
+        "type": "object",
+        "required": ["items", "total", "page", "pages", "limit"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/NoteFraisOut" } },
+          "total": { "type": "integer" },
+          "page":  { "type": "integer" },
+          "pages": { "type": "integer" },
+          "limit": { "type": "integer" }
+        }
+      },
+      "EnumsResponse": {
+        "type": "object",
+        "properties": {
+          "cra_categories": { "type": "array", "items": { "$ref": "#/components/schemas/CraCategory" } },
+          "cra_activities": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "$ref": "#/components/schemas/CraActivity" }
+            }
+          },
+          "expense_types": { "type": "array", "items": { "$ref": "#/components/schemas/ExpenseType" } },
+          "statuses": { "type": "array", "items": { "$ref": "#/components/schemas/Status" } }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": { "status": { "type": "string", "example": "ok" } }
+      },
+      "HTTPError": {
+        "type": "object",
+        "properties": { "detail": { "type": "string" } }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Health check",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Server is up",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": { "status": "ok" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enums": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Reference enums (categories, activities, expense types, statuses)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "All dropdown values used by the portal",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EnumsResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Login (OAuth2 password flow) — returns JWT",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "description": "Email address (OAuth2 spec uses 'username')", "example": "demo@cra.local" },
+                  "password": { "type": "string", "format": "password", "example": "demo1234" },
+                  "grant_type": { "type": "string", "default": "password" },
+                  "scope": { "type": "string" },
+                  "client_id": { "type": "string" },
+                  "client_secret": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JWT issued",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPError" } } }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Current authenticated user",
+        "responses": {
+          "200": {
+            "description": "User profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserOut" },
+                "example": { "id": 1, "email": "demo@cra.local", "full_name": "Demo User", "role": "member" }
+              }
+            }
+          },
+          "401": { "description": "Missing or invalid token" }
+        }
+      }
+    },
+    "/api/cra/events": {
+      "get": {
+        "tags": ["cra"],
+        "summary": "List CRA events for a given month",
+        "parameters": [
+          {
+            "name": "month", "in": "query", "required": true,
+            "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" },
+            "example": "2026-05"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events for that month",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CraEventOut" } }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["cra"],
+        "summary": "Create a CRA event (single day or range)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CraEventCreate" },
+              "example": {
+                "categorie": "Travail",
+                "activity": "Prestation",
+                "start_date": "2026-05-04",
+                "end_date": "2026-05-04",
+                "all_day": true,
+                "nb": 1.0,
+                "description": "Prestation client"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Event created",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CraEventOut" } } }
+          },
+          "400": { "description": "Invalid payload (e.g. activity not in category, end_date < start_date)" },
+          "409": { "description": "Month already validated" }
+        }
+      }
+    },
+    "/api/cra/events/{event_id}": {
+      "put": {
+        "tags": ["cra"],
+        "summary": "Update a CRA event",
+        "parameters": [
+          { "name": "event_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CraEventUpdate" },
+              "example": { "description": "Prestation client (mise à jour)" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CraEventOut" } } } },
+          "400": { "description": "Invalid payload" },
+          "404": { "description": "Event not found" }
+        }
+      },
+      "delete": {
+        "tags": ["cra"],
+        "summary": "Delete a CRA event",
+        "parameters": [
+          { "name": "event_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "404": { "description": "Event not found" }
+        }
+      }
+    },
+    "/api/cra/month/{month}/submit": {
+      "post": {
+        "tags": ["cra"],
+        "summary": "Submit a month for validation",
+        "description": "Moves the month from Draft to Pending and stamps `submitted_at`.",
+        "parameters": [
+          {
+            "name": "month", "in": "path", "required": true,
+            "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" },
+            "example": "2026-05"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CraMonthSubmit" },
+              "example": {
+                "description_tasks": "Activités du mois de mai 2026",
+                "reserve_use_eur": 0,
+                "reserve_use_days": 0,
+                "reserve_save_eur": 0,
+                "reserve_save_days": 0
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Submitted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CraMonthOut" } } } },
+          "409": { "description": "Month already validated" }
+        }
+      }
+    },
+    "/api/cra/month/{month}/signature": {
+      "post": {
+        "tags": ["cra"],
+        "summary": "Upload signature image for the month",
+        "parameters": [
+          {
+            "name": "month", "in": "path", "required": true,
+            "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" },
+            "example": "2026-05"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "PDF/PNG/JPG, max 5 MB" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Signature stored, returns the month with `signature_path` set", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CraMonthOut" } } } },
+          "413": { "description": "File too large (>5 MB)" },
+          "415": { "description": "Unsupported file type" }
+        }
+      }
+    },
+    "/api/cra-tracking/months": {
+      "get": {
+        "tags": ["cra-tracking"],
+        "summary": "Paginated list of CRA months for the current user",
+        "parameters": [
+          { "name": "year",  "in": "query", "schema": { "type": "integer", "minimum": 2000, "maximum": 2100 } },
+          { "name": "month", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 12 } },
+          { "name": "page",  "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of months",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PageCraMonthOut" } } }
+          }
+        }
+      }
+    },
+    "/api/cra-tracking/months/{month}/import-client-cra": {
+      "post": {
+        "tags": ["cra-tracking"],
+        "summary": "Upload signed client CRA PDF for a month",
+        "parameters": [
+          {
+            "name": "month", "in": "path", "required": true,
+            "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "Signed CRA PDF, max 5 MB" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Client CRA stored", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CraMonthOut" } } } },
+          "404": { "description": "CRA month not found (must be created via submit first)" }
+        }
+      }
+    },
+    "/api/expenses/filter": {
+      "post": {
+        "tags": ["expenses"],
+        "summary": "List expenses with filters (paginated)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NoteFraisFilter" },
+              "example": { "year": 2026, "page": 1, "limit": 10 }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page of expenses",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PageNoteFraisOut" } } }
+          }
+        }
+      }
+    },
+    "/api/expenses": {
+      "post": {
+        "tags": ["expenses"],
+        "summary": "Create an expense (multipart, with optional receipt)",
+        "description": "Receipt is **required** for every type except `Indemnités kilométriques`. Allowed file types: PDF, PNG, JPG, JPEG. Max 5 MB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["type", "month", "total_amount"],
+                "properties": {
+                  "type": { "$ref": "#/components/schemas/ExpenseType" },
+                  "month": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$", "example": "2026-05" },
+                  "description": { "type": "string", "default": "" },
+                  "total_amount": { "type": "number", "exclusiveMinimum": true, "minimum": 0, "example": 42.50 },
+                  "billable_to_client": { "type": "boolean", "default": false },
+                  "comment": { "type": "string", "default": "" },
+                  "receipt": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Expense created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoteFraisOut" } } } },
+          "400": { "description": "Receipt required for this expense type" },
+          "413": { "description": "File too large" },
+          "415": { "description": "Unsupported file type" }
+        }
+      }
+    },
+    "/api/expenses/{expense_id}": {
+      "put": {
+        "tags": ["expenses"],
+        "summary": "Update an expense (only while not Validated)",
+        "parameters": [
+          { "name": "expense_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NoteFraisUpdate" },
+              "example": { "comment": "Mise à jour du commentaire" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoteFraisOut" } } } },
+          "404": { "description": "Expense not found" },
+          "409": { "description": "Expense already validated" }
+        }
+      },
+      "delete": {
+        "tags": ["expenses"],
+        "summary": "Delete an expense (only while not Validated)",
+        "parameters": [
+          { "name": "expense_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "404": { "description": "Expense not found" },
+          "409": { "description": "Cannot delete a validated expense" }
+        }
+      }
+    }
+  }
+}

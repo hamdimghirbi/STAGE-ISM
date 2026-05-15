@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 .venv/
 .env
+.claude/
+.pytest_cache/
+.coverage
+htmlcov/
+mock-api/app.db
+mock-api/storage/

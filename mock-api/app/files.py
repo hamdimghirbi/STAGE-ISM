@@ -14,10 +14,10 @@ def _ext(filename: str) -> str:
 
 
 def save_upload(upload: UploadFile, user_id: int, subdir: str) -> str:
-    \"\"\"Validate and save an UploadFile under storage/<user_id>/<subdir>/<uuid>.<ext>.
+    """Validate and save an UploadFile under storage/<user_id>/<subdir>/<uuid>.<ext>.
 
     Returns the relative path (string) to the stored file.
-    \"\"\"
+    """
     if not upload.filename:
         raise HTTPException(status_code=400, detail='Empty filename')
 

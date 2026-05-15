@@ -13,7 +13,7 @@ from app.schemas import CraMonthOut, Page
 
 router = APIRouter()
 
-MONTH_REGEX = r'^\\d{4}-(0[1-9]|1[0-2])$'
+MONTH_REGEX = r'^\d{4}-(0[1-9]|1[0-2])$'
 
 
 @router.get('/months', response_model=Page[CraMonthOut])

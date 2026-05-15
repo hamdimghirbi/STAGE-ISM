@@ -1,0 +1,29 @@
+{
+  "info": {
+    "name": "CRA API MOCK DEV ENV",
+    "description": "Local dev environment for the CRA Mock API. Token and dynamic variables are populated automatically by the scenarios; leave them blank when importing."
+  },
+  "variables": [
+    { "name": "base_url",      "value": "http://localhost:8005",  "enabled": true,  "description": "Mock API base URL" },
+    { "name": "email",         "value": "demo@cra.local",         "enabled": true,  "description": "Demo user (auto-seeded)" },
+    { "name": "password",      "value": "demo1234",               "enabled": true,  "description": "Demo password" },
+    { "name": "bearerToken",   "value": "",                       "enabled": true,  "description": "JWT — set by /api/auth/login post-processor" },
+    { "name": "current_month", "value": "",                       "enabled": true,  "description": "YYYY-MM — set by Step 1 pre-script" },
+    { "name": "current_year",  "value": "",                       "enabled": true,  "description": "Year as int — set by pre-script" },
+    { "name": "today",         "value": "",                       "enabled": true,  "description": "YYYY-MM-DD — set by Step 1 pre-script" },
+    { "name": "month_start",   "value": "",                       "enabled": true,  "description": "First day of current month — set by Step 1 pre-script" },
+    { "name": "month_day_3",   "value": "",                       "enabled": true,  "description": "3rd day of current month — set by Step 1 pre-script" },
+    { "name": "month_day_5",   "value": "",                       "enabled": true,  "description": "5th day of current month — set by Step 1 pre-script" },
+    { "name": "event_id",      "value": "",                       "enabled": true,  "description": "Set by Create Event step (e2e_test_plan)" },
+    { "name": "event_id_1",    "value": "",                       "enabled": true,  "description": "Single-day Prestation — real_world_flow" },
+    { "name": "event_id_2",    "value": "",                       "enabled": true,  "description": "Multi-day Prestation — real_world_flow" },
+    { "name": "event_id_3",    "value": "",                       "enabled": true,  "description": "Absence/CP — real_world_flow" },
+    { "name": "event_id_4",    "value": "",                       "enabled": true,  "description": "Half-day Prestation — real_world_flow" },
+    { "name": "expense_id",    "value": "",                       "enabled": true,  "description": "Set by Create Expense step (e2e_test_plan)" },
+    { "name": "expense_id_1",  "value": "",                       "enabled": true,  "description": "Restaurant expense — real_world_flow" },
+    { "name": "expense_id_2",  "value": "",                       "enabled": true,  "description": "Indemnités kilométriques — real_world_flow" },
+    { "name": "expense_id_3",  "value": "",                       "enabled": true,  "description": "Titre de transport — real_world_flow" },
+    { "name": "event_id_temp", "value": "",                       "enabled": true,  "description": "Temp event used in edge case scenarios B-8/B-9" },
+    { "name": "validated_month","value": "",                      "enabled": true,  "description": "A seeded Validated month — used in edge cases B-11, C-1" }
+  ]
+}

@@ -12,7 +12,7 @@ from app.schemas import CraEventCreate, CraEventOut, CraEventUpdate, CraMonthOut
 
 router = APIRouter()
 
-MONTH_REGEX = r'^\\d{4}-(0[1-9]|1[0-2])$'
+MONTH_REGEX = r'^\d{4}-(0[1-9]|1[0-2])$'
 
 
 def _validate_event_payload(categorie, activity, start_date, end_date) -> None:
