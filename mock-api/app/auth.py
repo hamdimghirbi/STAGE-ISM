@@ -48,7 +48,10 @@ def get_current_user(
     user_id = payload.get('sub')
     if user_id is None:
         raise HTTPException(status_code=401, detail='Invalid token payload')
-    user = session.get(User, int(user_id))
+    try:
+        user = session.get(User, int(user_id))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=401, detail='Invalid token payload') from exc
     if user is None:
         raise HTTPException(status_code=401, detail='User not found')
     return user

@@ -15,16 +15,18 @@ step has what it needs), and the assertions to add.
 
    | Variable        | Initial value                  |
    |-----------------|--------------------------------|
-   | `base_url`      | `http://localhost:8000`        |
+   | `base_url`      | `http://localhost:8005`        |
    | `email`         | `demo@cra.local`               |
    | `password`      | `demo1234`                     |
-   | `token`         | *(empty — set by Step 1)*      |
+   | `bearerToken`   | *(empty — set by Step 1)*      |
    | `current_month` | *(empty — set by Step 1)*      |
    | `event_id`      | *(empty — set by Step 4)*      |
    | `expense_id`    | *(empty — set by Step 8)*      |
 
-4. Project-level **Authorization** set to `Bearer Token` with value `{{token}}`
-   (this auto-applies the JWT to every request that has security).
+4. Bearer auth is already wired up by the OpenAPI import: each folder in
+   the APIs section has an **Auth** tab bound to `{{bearerToken}}`. Step 1's
+   post-processor writes the JWT into that variable, so every subsequent
+   request inherits it automatically.
 
 5. Sample fixture files exist (regenerate if needed):
    ```
@@ -45,7 +47,7 @@ step has what it needs), and the assertions to add.
   - `username` = `{{email}}`
   - `password` = `{{password}}`
 - **Post-processor — Extract**:
-  - `token` ← JSONPath `$.access_token` → save to env var `token`
+  - `bearerToken` ← JSONPath `$.access_token` → save to env var `bearerToken`
   - `current_month` ← Custom script:
     ```js
     const d = new Date();
@@ -243,8 +245,8 @@ Build these as a separate scenario `CRA Mock API — Edge Cases`:
 
 - Apidog supports **chaining**: extract from one step, use in the next. The
   `event_id`, `expense_id`, and `current_month` extractions above rely on this.
-- The Bearer token only needs to be set once (Step 1 stores it, project auth
-  reads `{{token}}` thereafter).
+- The Bearer token only needs to be set once (Step 1 stores it, folder-level
+  Auth reads `{{bearerToken}}` thereafter).
 - If you re-run the scenario back-to-back, Step 7 will fail with `409` because
   the month is now `Pending`. Either delete `mock-api/app.db` between runs, or
   add a Step 0 that calls `/api/cra/events?month={{current_month}}` and deletes

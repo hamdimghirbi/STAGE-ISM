@@ -1,124 +1,166 @@
-# Apidog setup for the CRA Mock API
+# Apidog & Newman setup for the CRA Mock API
 
-This folder contains everything you need to test the mock-api with Apidog.
+This folder contains everything you need to test the mock-api with either
+**Apidog** (interactive GUI) or **Newman** (CLI). For the full testing
+strategy — including pytest — see the [top-level CLAUDE.md](../CLAUDE.md).
 
 ## What's here
 
 ```
 apidog/
-├── README.md                 ← you are here
-├── openapi.json              ← full OpenAPI 3.0 spec, import this into Apidog
-├── environment.json          ← environment variables (base_url, demo creds, etc.)
+├── README.md                          ← you are here
+├── openapi.json                       ← OpenAPI 3.0 spec, importable into any API tool
+├── environment.json                   ← Apidog-format environment variables
+├── environment.postman.json           ← Postman/Newman-format environment
+├── cra_mock_api.postman_collection.json  ← 79-test Postman collection (3 scenarios)
 ├── fixtures/
-│   └── sample_receipt.pdf    ← tiny valid PDF for multipart upload tests
+│   ├── sample_receipt.pdf             ← tiny valid PDF for multipart upload tests
+│   └── sample_signature.png           ← 1×1 PNG for signature uploads
 ├── scenarios/
-│   └── e2e_test_plan.md      ← step-by-step E2E scenario to build in Apidog
+│   ├── e2e_test_plan.md               ← 14-step Happy Path narrative
+│   └── real_world_flow.md             ← 28-step Real World Flow narrative
 └── scripts/
-    ├── start_server.bat      ← one-click server start (Windows cmd)
-    ├── start_server.ps1      ← same, for PowerShell
-    ├── fetch_openapi.py      ← grab the live spec from the running server
-    └── make_fixtures.py      ← regenerate the fixture files (PDF + PNG)
+    ├── start_server.bat               ← one-click server start (cmd)
+    ├── start_server.ps1               ← same, for PowerShell
+    ├── fetch_openapi.py               ← grab the live spec from the running server
+    └── make_fixtures.py               ← regenerate fixture files (PDF + PNG)
 ```
 
 ## Quick start
 
 ### 1. Start the mock-api
 
-Double-click `apidog/scripts/start_server.bat` — or run it from a terminal:
+Double-click `apidog/scripts/start_server.bat` — or from PowerShell:
 
-```cmd
-apidog\scripts\start_server.bat
+```powershell
+& "apidog\scripts\start_server.ps1"
 ```
 
-You should see Uvicorn boot on `http://localhost:8000`. Sanity-check with:
+The server starts on **port 8005**. Sanity-check:
 
-- http://localhost:8000/healthz → `{"status":"ok"}`
-- http://localhost:8000/docs → Swagger UI
+- http://localhost:8005/healthz → `{"status":"ok"}`
+- http://localhost:8005/docs → Swagger UI
 
 ### 2. Generate the fixture files
 
-```cmd
+```powershell
 python apidog\scripts\make_fixtures.py
 ```
 
 This writes a tiny valid PDF and a 1×1 PNG into `apidog/fixtures/`.
 
-### 3. Import into Apidog
+---
 
-In the Apidog desktop app:
+## Path A — Newman CLI (recommended for full coverage)
 
-1. **New Project** → name it `CRA Mock API`
+Newman runs the 79-test Postman collection end-to-end in ~8 seconds.
+
+```powershell
+# install once
+npm install -g newman
+
+# run the full suite
+newman run apidog\cra_mock_api.postman_collection.json `
+  -e apidog\environment.postman.json
+```
+
+The collection has 3 folders:
+
+| Folder | Tests | What it covers |
+|---|---|---|
+| `01 — Happy Path E2E` | 14 | Login → manage events → submit → sign → expense → filter → cleanup |
+| `02 — Real World Flow` | 28 | Full consultant monthly workflow (multi-day, absences, half-days, 3 expense types) |
+| `03 — Edge Cases` | 37 | Auth errors, validation errors, all activity/expense types, pagination |
+
+Run just one folder:
+
+```powershell
+newman run apidog\cra_mock_api.postman_collection.json `
+  -e apidog\environment.postman.json `
+  --folder "02 — Real World Flow"
+```
+
+---
+
+## Path B — Apidog (interactive GUI)
+
+### 1. Import the OpenAPI spec into Apidog
+
+1. **New Project** → name it `CRA API MOCK`
 2. **Settings → Import Data → OpenAPI/Swagger** → pick `apidog/openapi.json`
-3. Apidog will create folders matching the OpenAPI tags:
-   `auth`, `cra`, `cra-tracking`, `expenses`, `meta` — every endpoint pre-filled
-   with example bodies, schemas, and response definitions.
+3. Apidog creates folders matching the OpenAPI tags:
+   `auth`, `cra`, `cra-tracking`, `expenses`, `meta` — every endpoint pre-filled.
 
-### 4. Set up the environment
+### 2. Set up the environment
+
+Create a new environment called **`CRA API MOCK DEV ENV`** with these
+variables (copy from `environment.json`):
+
+| Variable | Initial value | Notes |
+|---|---|---|
+| `base_url` | `http://localhost:8005` | Server URL |
+| `email` | `demo@cra.local` | Demo user (auto-seeded) |
+| `password` | `demo1234` | Demo password |
+| `bearerToken` | *(blank)* | Set by login step's post-processor |
+| `current_month`, `today`, `month_start`, … | *(blank)* | Set by Step 1 pre-script |
+| `event_id_*`, `expense_id_*` | *(blank)* | Set by individual steps |
+
+### 3. Bearer auth is auto-wired by the OpenAPI import
+
+After importing the OpenAPI spec, each folder in Apidog (`auth`, `cra`, …)
+has an **Auth** tab where the Bearer token is bound to `{{bearerToken}}`.
+You **don't** need to configure project-level auth — the import already did it.
+
+The login step's post-processor extracts the JWT from `$.access_token` and
+writes it to the `bearerToken` env variable. Every subsequent step inherits
+it automatically.
+
+### 4. Build the test scenario
 
 Two options:
 
-**Easier**: in Apidog, create a new env called `Local` and copy the variables
-listed in `environment.json` (or in the env table inside `scenarios/e2e_test_plan.md`).
+- **Manual** — follow `apidog/scenarios/e2e_test_plan.md` (14 steps) or
+  `apidog/scenarios/real_world_flow.md` (28 steps), step by step.
+- **Import the Postman collection** — Apidog → Settings → Import Data →
+  Postman → pick `cra_mock_api.postman_collection.json`. Apidog merges by
+  endpoint URL, so steps end up grouped by HTTP path, not by scenario.
+  Most users prefer the manual build for cleaner organization.
 
-**Direct import**: Apidog's import for environment files varies by version —
-look for **Settings → Environments → Import** and try the `environment.json`
-file. If it doesn't accept the format, fall back to entering the variables
-manually (it's only 9 of them).
+### 5. Run it
 
-### 5. Set the project-level Bearer auth
+Click **Run** on the scenario in Apidog.
 
-**Project Settings → Authorization → Bearer Token**, value: `{{token}}`.
+---
 
-The login step (Step 1 of the E2E scenario) writes the JWT into `{{token}}`,
-and every subsequent request inherits it automatically.
+## Refreshing the OpenAPI spec after API changes
 
-### 6. Build the E2E test scenario
+When the mock-api code changes, the committed `openapi.json` may drift. To refresh:
 
-Follow `apidog/scenarios/e2e_test_plan.md` step by step. The scenario covers:
-
-```
-login → /me → /enums → create event → list events → update event
-      → submit month → upload signature → create expense
-      → filter expenses → list tracking months → cleanup
-```
-
-with assertions on every step and chained variable extraction between steps.
-
-### 7. Run it
-
-In Apidog, click **Run** on the scenario. You should see all 14 steps go green.
-
-To run from the command line:
-
-```cmd
-apidog test --scenario "CRA Mock API — Happy Path"
-```
-
-(requires Apidog CLI to be installed and the project linked).
-
-## Refreshing after API changes
-
-When the mock-api code changes, the committed `openapi.json` may drift. To
-refresh:
-
-```cmd
-REM 1. with the server running:
+```powershell
+# 1. with the server running:
 python apidog\scripts\fetch_openapi.py
 
-REM 2. diff against the committed copy:
+# 2. diff against the committed copy:
 git diff apidog\openapi.json apidog\openapi_live.json
 
-REM 3. if the live spec is the source of truth now:
+# 3. if the live spec is the source of truth now:
 copy apidog\openapi_live.json apidog\openapi.json
 
-REM 4. re-import into Apidog (it will offer to merge changes)
+# 4. re-import into Apidog (it will offer to merge changes)
 ```
+
+---
 
 ## Known caveats
 
-- The seed data already contains 4 past `Validated` months and 2 expenses for
-  the demo user. Step 5 (list events) and Step 11 (list months) account for
-  this — assertions check that *our* item is present, not that it's the only one.
-- Re-running the scenario back-to-back: month becomes `Pending` after Step 7,
-  blocking event create/update on the second run with `409`. Either delete
-  `mock-api/app.db` between runs, or add a teardown step that resets state.
+- The seed data already contains 4 past `Validated` months and 2 expenses
+  for the demo user. Tests account for this.
+- **Re-running scenarios back-to-back**: after Step 9 of the Real World Flow,
+  the current month is `Pending`. The mock API allows re-submitting a
+  `Pending` month (it stays `Pending`), so most steps still work, but cleanup
+  is more reliable if you reset between full runs:
+  ```powershell
+  # stop the server, then:
+  del mock-api\app.db
+  # restart — seed runs again, demo user re-created
+  ```

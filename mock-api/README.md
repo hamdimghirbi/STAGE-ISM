@@ -10,7 +10,11 @@ It exposes a small REST API with JWT auth, SQLite persistence (via SQLModel) and
 
 > 📖 **Full API reference**: see [`docs/API.md`](docs/API.md) for every endpoint,
 > schema, status code, and gotcha. The auto-generated Swagger UI lives at
-> http://localhost:8000/docs once the server is running.
+> http://localhost:8005/docs once the server is running.
+>
+> 🛠️ **Want to actually use it?** See [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) —
+> the consultant monthly workflow with concrete curl requests, sample responses,
+> and DB / filesystem verification steps.
 
 ## Stack
 
@@ -32,11 +36,11 @@ uv sync
 # 3. configure env
 cp .env.example .env
 
-# 4. run dev server
-uv run uvicorn app.main:app --reload
+# 4. run dev server (port 8005 — canonical across this repo)
+uv run uvicorn app.main:app --reload --port 8005
 ```
 
-Open http://localhost:8000/docs for the interactive Swagger UI.
+Open http://localhost:8005/docs for the interactive Swagger UI.
 
 A demo user is auto-seeded on first run:
 
@@ -69,12 +73,38 @@ For full details (request bodies, responses, status codes, edge cases) see
 | Meta | GET | /healthz | Liveness probe |
 | Meta | GET | /api/enums | All dropdown values |
 
-## Testing with Apidog
+## Testing
 
-A full Apidog setup — OpenAPI spec, environment variables, fixtures, and a
-14-step end-to-end test scenario — lives in [`../apidog/`](../apidog/).
-Start there if you want to run the API through a test runner rather than the
-Swagger UI.
+Three independent test strategies — see the
+[top-level CLAUDE.md](../CLAUDE.md) for a full comparison.
+
+### 1. pytest (canonical — 116 tests, 100% line coverage)
+
+```bash
+cd mock-api
+uv sync --dev
+uv run pytest                                 # all tests, ~50s
+uv run pytest tests/unit/                     # just unit tests
+uv run pytest tests/scenarios/                # just the real-world flow
+uv run pytest --cov=app --cov-report=term     # with coverage
+```
+
+Tests use an isolated tmp SQLite DB per test, so they don't touch `app.db`.
+
+### 2. Newman CLI (Postman runner — 79 tests, 8s)
+
+Black-box regression against a running server. See
+[`../apidog/cra_mock_api.postman_collection.json`](../apidog/cra_mock_api.postman_collection.json):
+
+```bash
+newman run apidog/cra_mock_api.postman_collection.json \
+  -e apidog/environment.postman.json
+```
+
+### 3. Apidog (interactive / exploratory)
+
+OpenAPI spec, environment, fixtures, and scenarios live in
+[`../apidog/`](../apidog/). Best for one-off requests and visual debugging.
 
 ## Project layout
 
@@ -85,22 +115,28 @@ mock-api/
 ├── .env.example
 ├── README.md
 ├── docs/
-│   └── API.md           ← canonical API reference
-└── app/
-    ├── main.py
-    ├── config.py
-    ├── db.py
-    ├── models.py
-    ├── schemas.py
-    ├── enums.py
-    ├── auth.py
-    ├── files.py
-    ├── seed.py
-    └── routers/
-        ├── auth.py
-        ├── cra.py
-        ├── cra_tracking.py
-        └── expenses.py
+│   └── API.md                ← canonical API reference
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── db.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── enums.py
+│   ├── auth.py
+│   ├── files.py
+│   ├── seed.py
+│   └── routers/
+│       ├── auth.py
+│       ├── cra.py
+│       ├── cra_tracking.py
+│       └── expenses.py
+└── tests/                    ← 116 pytest tests, 100% line coverage
+    ├── conftest.py           ← shared fixtures (isolated tmp DB per test)
+    ├── _helpers.py           ← reusable verbs for scenario tests
+    ├── unit/                 ← per-router tests
+    ├── edge_cases/           ← parametrized negatives + conflicts + JWT
+    └── scenarios/            ← real-world consultant flow
 ```
 
 ## Notes

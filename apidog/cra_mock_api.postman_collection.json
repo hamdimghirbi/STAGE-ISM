@@ -1,0 +1,917 @@
+{
+  "info": {
+    "_postman_id": "cra-mock-api-complete",
+    "name": "CRA Mock API — Complete Test Suite",
+    "description": "Three scenarios:\n1. Happy Path E2E — 14 steps, basic flow\n2. Real World Flow — 28 steps, full consultant monthly workflow\n3. Edge Cases — auth errors, validation errors, all activity/expense types, pagination\n\nPrerequisites:\n- Mock API on http://localhost:8005 (apidog/scripts/start_server.ps1)\n- Environment 'CRA API MOCK DEV ENV' loaded\n- Fixture files (python apidog/scripts/make_fixtures.py)\n\nImport via: Apidog → Settings → Import Data → Postman → pick this file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{bearerToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "01 — Happy Path E2E",
+      "description": "14-step happy path: login -> manage events -> submit -> sign -> expense -> filter -> cleanup.",
+      "item": [
+        {
+          "name": "Step 01 — Login",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const d = new Date();",
+              "const pad = n => String(n).padStart(2, '0');",
+              "pm.environment.set('today', `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`);",
+              "pm.environment.set('current_month', `${d.getFullYear()}-${pad(d.getMonth()+1)}`);",
+              "pm.environment.set('current_year', d.getFullYear());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const j = pm.response.json();",
+              "pm.expect(j.access_token).to.be.a('string').with.length.above(20);",
+              "pm.environment.set('bearerToken', j.access_token);"
+            ]}}
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "username", "value": "{{email}}", "type": "text" },
+              { "key": "password", "value": "{{password}}", "type": "text" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Step 02 — Get current user",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.email).to.equal(pm.environment.get('email'));",
+            "pm.expect(j.role).to.equal('member');"
+          ]}}],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/auth/me", "host": ["{{base_url}}"], "path": ["api", "auth", "me"] }
+          }
+        },
+        {
+          "name": "Step 03 — Get enums",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.cra_categories).to.include('Travail');",
+            "pm.expect(j.cra_categories).to.include('Absence');",
+            "pm.expect(j.expense_types).to.include('Restaurant');"
+          ]}}],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/enums", "host": ["{{base_url}}"], "path": ["api", "enums"] }
+          }
+        },
+        {
+          "name": "Step 04 — Create event",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.activity).to.equal('Prestation');",
+            "pm.environment.set('event_id', j.id);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"Prestation\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0,\n  \"description\": \"E2E test — Prestation\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }
+          }
+        },
+        {
+          "name": "Step 05 — List events for month",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j).to.be.an('array').with.length.above(0);",
+            "const eid = Number(pm.environment.get('event_id'));",
+            "pm.expect(j.some(e => e.id === eid)).to.be.true;"
+          ]}}],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra/events?month={{current_month}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events"], "query": [{ "key": "month", "value": "{{current_month}}" }] }
+          }
+        },
+        {
+          "name": "Step 06 — Update event",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().description).to.equal('E2E test — updated');"
+          ]}}],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"description\": \"E2E test — updated\" }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events/{{event_id}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id}}"] }
+          }
+        },
+        {
+          "name": "Step 07 — Submit month",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.status).to.equal('Pending');",
+            "pm.expect(j.submitted_at).to.not.be.null;"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description_tasks\": \"E2E test month\",\n  \"reserve_use_eur\": 0, \"reserve_use_days\": 0, \"reserve_save_eur\": 0, \"reserve_save_days\": 0\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/month/{{current_month}}/submit", "host": ["{{base_url}}"], "path": ["api", "cra", "month", "{{current_month}}", "submit"] }
+          }
+        },
+        {
+          "name": "Step 08 — Upload signature",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.signature_path).to.include('signatures');"
+          ]}}],
+          "request": {
+            "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "file", "type": "file", "src": "apidog/fixtures/sample_signature.png" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/cra/month/{{current_month}}/signature", "host": ["{{base_url}}"], "path": ["api", "cra", "month", "{{current_month}}", "signature"] }
+          }
+        },
+        {
+          "name": "Step 09 — Create expense",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.type).to.equal('Restaurant');",
+            "pm.expect(j.total_amount).to.equal(42.5);",
+            "pm.environment.set('expense_id', j.id);"
+          ]}}],
+          "request": {
+            "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "type", "value": "Restaurant", "type": "text" },
+              { "key": "month", "value": "{{current_month}}", "type": "text" },
+              { "key": "description", "value": "Repas client (E2E)", "type": "text" },
+              { "key": "total_amount", "value": "42.50", "type": "text" },
+              { "key": "billable_to_client", "value": "true", "type": "text" },
+              { "key": "comment", "value": "Test scenario", "type": "text" },
+              { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }
+          }
+        },
+        {
+          "name": "Step 10 — Filter expenses",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.total).to.be.at.least(1);",
+            "const eid = Number(pm.environment.get('expense_id'));",
+            "pm.expect(j.items.some(x => x.id === eid)).to.be.true;"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"type\": \"Restaurant\", \"page\": 1, \"limit\": 50 }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }
+          }
+        },
+        {
+          "name": "Step 11 — List CRA tracking months",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.items).to.be.an('array');",
+            "pm.expect(j.page).to.equal(1);"
+          ]}}],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra-tracking/months?page=1&limit=10", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Step 12 — Cleanup: delete expense",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 204', () => pm.response.to.have.status(204));"
+          ]}}],
+          "request": {
+            "method": "DELETE", "header": [],
+            "url": { "raw": "{{base_url}}/api/expenses/{{expense_id}}", "host": ["{{base_url}}"], "path": ["api", "expenses", "{{expense_id}}"] }
+          }
+        },
+        {
+          "name": "Step 13 — Cleanup: delete event",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 204', () => pm.response.to.have.status(204));"
+          ]}}],
+          "request": {
+            "method": "DELETE", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra/events/{{event_id}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id}}"] }
+          }
+        },
+        {
+          "name": "Step 14 — Verify cleanup",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const eid = Number(pm.environment.get('event_id'));",
+            "pm.expect(pm.response.json().some(e => e.id === eid)).to.be.false;"
+          ]}}],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra/events?month={{current_month}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events"], "query": [{ "key": "month", "value": "{{current_month}}" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — Real World Flow",
+      "description": "28-step consultant monthly workflow.",
+      "item": [
+        {
+          "name": "Step 01 — Login (sets date vars)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const d = new Date();",
+              "const pad = n => String(n).padStart(2, '0');",
+              "const y = d.getFullYear();",
+              "const m = pad(d.getMonth()+1);",
+              "pm.environment.set('current_month', `${y}-${m}`);",
+              "pm.environment.set('current_year', y);",
+              "pm.environment.set('today', `${y}-${m}-${pad(d.getDate())}`);",
+              "pm.environment.set('month_start', `${y}-${m}-01`);",
+              "pm.environment.set('month_day_3', `${y}-${m}-03`);",
+              "pm.environment.set('month_day_5', `${y}-${m}-05`);"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.environment.set('bearerToken', pm.response.json().access_token);"
+            ]}}
+          ],
+          "request": {
+            "auth": { "type": "noauth" }, "method": "POST", "header": [],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "username", "value": "{{email}}", "type": "text" },
+              { "key": "password", "value": "{{password}}", "type": "text" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Step 02 — Get enums",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.cra_activities.Travail).to.include('Prestation');",
+            "pm.expect(j.cra_activities.Absence).to.include('CP');"
+          ]}}],
+          "request": { "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/enums", "host": ["{{base_url}}"], "path": ["api", "enums"] }}
+        },
+        {
+          "name": "Step 03 — Create single work day",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.nb).to.equal(1.0);",
+            "pm.environment.set('event_id_1', j.id);"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"Prestation\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0,\n  \"description\": \"Client on-site — real world\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+        },
+        {
+          "name": "Step 04 — Create multi-day range",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "pm.environment.set('event_id_2', pm.response.json().id);"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"Prestation\",\n  \"start_date\": \"{{month_start}}\",\n  \"end_date\": \"{{month_day_3}}\",\n  \"all_day\": true,\n  \"nb\": 1.0,\n  \"description\": \"Sprint delivery — 3 days\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+        },
+        {
+          "name": "Step 05 — Create absence (CP)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.categorie).to.equal('Absence');",
+            "pm.expect(j.activity).to.equal('CP');",
+            "pm.environment.set('event_id_3', j.id);"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Absence\",\n  \"activity\": \"CP\",\n  \"start_date\": \"{{month_day_5}}\",\n  \"end_date\": \"{{month_day_5}}\",\n  \"all_day\": true,\n  \"nb\": 1.0,\n  \"description\": \"Paid leave\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+        },
+        {
+          "name": "Step 06 — Create half-day (nb=0.5)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.nb).to.equal(0.5);",
+            "pm.expect(j.all_day).to.equal(false);",
+            "pm.environment.set('event_id_4', j.id);"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"Prestation\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": false,\n  \"nb\": 0.5,\n  \"description\": \"Morning only\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+        },
+        {
+          "name": "Step 07 — List events (verify all 4)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const ids = pm.response.json().map(e => e.id);",
+            "[1,2,3,4].forEach(i => pm.expect(ids).to.include(Number(pm.environment.get('event_id_'+i))));"
+          ]}}],
+          "request": { "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra/events?month={{current_month}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events"], "query": [{ "key": "month", "value": "{{current_month}}" }] }}
+        },
+        {
+          "name": "Step 08 — Update half-day",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().description).to.equal('Morning Prestation — updated');"
+          ]}}],
+          "request": { "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"description\": \"Morning Prestation — updated\", \"nb\": 0.5 }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/events/{{event_id_4}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id_4}}"] }}
+        },
+        {
+          "name": "Step 09 — Submit month",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().status).to.equal('Pending');"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description_tasks\": \"Prestation + CP — real world\",\n  \"reserve_use_eur\": 0, \"reserve_use_days\": 0, \"reserve_save_eur\": 0, \"reserve_save_days\": 0\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/cra/month/{{current_month}}/submit", "host": ["{{base_url}}"], "path": ["api", "cra", "month", "{{current_month}}", "submit"] }}
+        },
+        {
+          "name": "Step 10 — Upload signature",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().signature_path).to.include('signatures');"
+          ]}}],
+          "request": { "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "apidog/fixtures/sample_signature.png" }]},
+            "url": { "raw": "{{base_url}}/api/cra/month/{{current_month}}/signature", "host": ["{{base_url}}"], "path": ["api", "cra", "month", "{{current_month}}", "signature"] }}
+        },
+        {
+          "name": "Step 11 — Restaurant expense",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "pm.environment.set('expense_id_1', pm.response.json().id);"
+          ]}}],
+          "request": { "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "type", "value": "Restaurant", "type": "text" },
+              { "key": "month", "value": "{{current_month}}", "type": "text" },
+              { "key": "description", "value": "Team lunch", "type": "text" },
+              { "key": "total_amount", "value": "38.50", "type": "text" },
+              { "key": "billable_to_client", "value": "true", "type": "text" },
+              { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+        },
+        {
+          "name": "Step 12 — Km expense (no receipt)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.receipt_path).to.be.null;",
+            "pm.environment.set('expense_id_2', j.id);"
+          ]}}],
+          "request": { "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "type", "value": "Indemnités kilométriques", "type": "text" },
+              { "key": "month", "value": "{{current_month}}", "type": "text" },
+              { "key": "description", "value": "Paris->Lyon 450km", "type": "text" },
+              { "key": "total_amount", "value": "202.50", "type": "text" },
+              { "key": "billable_to_client", "value": "false", "type": "text" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+        },
+        {
+          "name": "Step 13 — Transport expense",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 201', () => pm.response.to.have.status(201));",
+            "pm.environment.set('expense_id_3', pm.response.json().id);"
+          ]}}],
+          "request": { "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "type", "value": "Titre de transport", "type": "text" },
+              { "key": "month", "value": "{{current_month}}", "type": "text" },
+              { "key": "description", "value": "Train Paris-Lyon", "type": "text" },
+              { "key": "total_amount", "value": "89.00", "type": "text" },
+              { "key": "billable_to_client", "value": "true", "type": "text" },
+              { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+            ]},
+            "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+        },
+        {
+          "name": "Step 14 — Update restaurant amount",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().total_amount).to.equal(42.0);"
+          ]}}],
+          "request": { "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"total_amount\": 42.00, \"comment\": \"Updated\" }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/expenses/{{expense_id_1}}", "host": ["{{base_url}}"], "path": ["api", "expenses", "{{expense_id_1}}"] }}
+        },
+        {
+          "name": "Step 15 — Filter all expenses",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const ids = pm.response.json().items.map(x => x.id);",
+            "[1,2,3].forEach(i => pm.expect(ids).to.include(Number(pm.environment.get('expense_id_'+i))));"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"page\": 1, \"limit\": 50 }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+        },
+        {
+          "name": "Step 16 — Filter Restaurant only",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.response.json().items.forEach(x => pm.expect(x.type).to.equal('Restaurant'));"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"type\": \"Restaurant\", \"page\": 1, \"limit\": 10 }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+        },
+        {
+          "name": "Step 17 — Delete transport",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [],
+            "url": { "raw": "{{base_url}}/api/expenses/{{expense_id_3}}", "host": ["{{base_url}}"], "path": ["api", "expenses", "{{expense_id_3}}"] }}
+        },
+        {
+          "name": "Step 18 — Verify transport gone",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const ids = pm.response.json().items.map(x => x.id);",
+            "pm.expect(ids).to.not.include(Number(pm.environment.get('expense_id_3')));"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"page\": 1, \"limit\": 50 }", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+        },
+        {
+          "name": "Step 19 — Tracking (Pending)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const cm = pm.environment.get('current_month');",
+            "const f = pm.response.json().items.find(m => m.month === cm);",
+            "pm.expect(f).to.exist;",
+            "pm.expect(f.status).to.equal('Pending');"
+          ]}}],
+          "request": { "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra-tracking/months?page=1&limit=10", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }}
+        },
+        {
+          "name": "Step 20 — Import client CRA",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().client_cra_path).to.include('client-cra');"
+          ]}}],
+          "request": { "method": "POST", "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }]},
+            "url": { "raw": "{{base_url}}/api/cra-tracking/months/{{current_month}}/import-client-cra", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months", "{{current_month}}", "import-client-cra"] }}
+        },
+        {
+          "name": "Step 21 — Verify client_cra_path",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const cm = pm.environment.get('current_month');",
+            "const f = pm.response.json().items.find(m => m.month === cm);",
+            "pm.expect(f.client_cra_path).to.not.be.null;"
+          ]}}],
+          "request": { "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra-tracking/months?page=1&limit=10", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }}
+        },
+        {
+          "name": "Step 22 — Del expense 1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/api/expenses/{{expense_id_1}}", "host": ["{{base_url}}"], "path": ["api", "expenses", "{{expense_id_1}}"] }}
+        },
+        {
+          "name": "Step 23 — Del expense 2",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/api/expenses/{{expense_id_2}}", "host": ["{{base_url}}"], "path": ["api", "expenses", "{{expense_id_2}}"] }}
+        },
+        {
+          "name": "Step 24 — Del event 4",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/api/cra/events/{{event_id_4}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id_4}}"] }}
+        },
+        {
+          "name": "Step 25 — Del event 3",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/api/cra/events/{{event_id_3}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id_3}}"] }}
+        },
+        {
+          "name": "Step 26 — Del event 2",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/api/cra/events/{{event_id_2}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id_2}}"] }}
+        },
+        {
+          "name": "Step 27 — Del event 1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('204', () => pm.response.to.have.status(204));"]}}],
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/api/cra/events/{{event_id_1}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "{{event_id_1}}"] }}
+        },
+        {
+          "name": "Step 28 — Final verify",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const ids = pm.response.json().map(e => e.id);",
+            "[1,2,3,4].forEach(i => pm.expect(ids).to.not.include(Number(pm.environment.get('event_id_'+i))));"
+          ]}}],
+          "request": { "method": "GET", "header": [],
+            "url": { "raw": "{{base_url}}/api/cra/events?month={{current_month}}", "host": ["{{base_url}}"], "path": ["api", "cra", "events"], "query": [{ "key": "month", "value": "{{current_month}}" }] }}
+        }
+      ]
+    },
+    {
+      "name": "03 — Edge Cases",
+      "description": "Negative tests and extended coverage. Run AFTER logging in via Real World or Happy Path so bearerToken is set.",
+      "item": [
+        {
+          "name": "A — Auth errors",
+          "item": [
+            {
+              "name": "A-1 — Wrong password → 401",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]}}],
+              "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [],
+                "body": { "mode": "urlencoded", "urlencoded": [
+                  { "key": "username", "value": "{{email}}", "type": "text" },
+                  { "key": "password", "value": "wrongpassword", "type": "text" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] }}
+            },
+            {
+              "name": "A-2 — Unknown email → 401",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]}}],
+              "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [],
+                "body": { "mode": "urlencoded", "urlencoded": [
+                  { "key": "username", "value": "nobody@nowhere.com", "type": "text" },
+                  { "key": "password", "value": "demo1234", "type": "text" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] }}
+            },
+            {
+              "name": "A-3 — /me without token → 401",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]}}],
+              "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/auth/me", "host": ["{{base_url}}"], "path": ["api", "auth", "me"] }}
+            },
+            {
+              "name": "A-4 — Malformed token → 401",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "not-a-valid-jwt", "type": "string" }] },
+                "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/auth/me", "host": ["{{base_url}}"], "path": ["api", "auth", "me"] }}
+            }
+          ]
+        },
+        {
+          "name": "B — CRA Event errors",
+          "item": [
+            {
+              "name": "B-1 — Absence/Prestation → 400",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('400', () => pm.response.to.have.status(400));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Absence\",\n  \"activity\": \"Prestation\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "B-2 — Travail/CP → 400",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('400', () => pm.response.to.have.status(400));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"CP\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "B-3 — end_date < start_date → 400",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('400', () => pm.response.to.have.status(400));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"Prestation\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{month_start}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "B-4 — Bad month param → 422",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('422', () => pm.response.to.have.status(422));"]}}],
+              "request": { "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/cra/events?month=2026-13", "host": ["{{base_url}}"], "path": ["api", "cra", "events"], "query": [{ "key": "month", "value": "2026-13" }] }}
+            },
+            {
+              "name": "B-5 — Missing categorie → 422",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('422', () => pm.response.to.have.status(422));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"activity\": \"Prestation\", \"start_date\": \"{{today}}\", \"end_date\": \"{{today}}\" }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "B-6 — Empty month → []",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "pm.expect(pm.response.json()).to.be.an('array').with.lengthOf(0);"
+              ]}}],
+              "request": { "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/cra/events?month=2000-01", "host": ["{{base_url}}"], "path": ["api", "cra", "events"], "query": [{ "key": "month", "value": "2000-01" }] }}
+            },
+            {
+              "name": "B-7 — Update non-existent → 404",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('404', () => pm.response.to.have.status(404));"]}}],
+              "request": { "method": "PUT",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"description\": \"ghost\" }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events/999999", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "999999"] }}
+            },
+            {
+              "name": "B-10 — Delete non-existent → 404",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('404', () => pm.response.to.have.status(404));"]}}],
+              "request": { "method": "DELETE", "header": [],
+                "url": { "raw": "{{base_url}}/api/cra/events/999999", "host": ["{{base_url}}"], "path": ["api", "cra", "events", "999999"] }}
+            }
+          ]
+        },
+        {
+          "name": "C — CRA Month errors",
+          "item": [
+            {
+              "name": "C-2 — Bad month path → 422",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('422', () => pm.response.to.have.status(422));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"description_tasks\": \"bad month\" }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/month/2026-13/submit", "host": ["{{base_url}}"], "path": ["api", "cra", "month", "2026-13", "submit"] }}
+            }
+          ]
+        },
+        {
+          "name": "D — Expense errors",
+          "item": [
+            {
+              "name": "D-1 — Restaurant without receipt → 400",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('400', () => pm.response.to.have.status(400));"]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Restaurant", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "20.00", "type": "text" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "D-2 — Km without receipt → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('201', () => pm.response.to.have.status(201));",
+                "pm.expect(pm.response.json().receipt_path).to.be.null;"
+              ]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Indemnités kilométriques", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "50.00", "type": "text" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "D-4 — Zero amount → 422",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('422', () => pm.response.to.have.status(422));"]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Restaurant", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "0", "type": "text" },
+                  { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "D-5 — Update non-existent → 404",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('404', () => pm.response.to.have.status(404));"]}}],
+              "request": { "method": "PUT",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"total_amount\": 10.0 }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/expenses/999999", "host": ["{{base_url}}"], "path": ["api", "expenses", "999999"] }}
+            },
+            {
+              "name": "D-6 — Delete non-existent → 404",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('404', () => pm.response.to.have.status(404));"]}}],
+              "request": { "method": "DELETE", "header": [],
+                "url": { "raw": "{{base_url}}/api/expenses/999999", "host": ["{{base_url}}"], "path": ["api", "expenses", "999999"] }}
+            },
+            {
+              "name": "D-7 — Filter month=13 → 422",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('422', () => pm.response.to.have.status(422));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"year\": 2026, \"month\": 13 }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+            },
+            {
+              "name": "D-8 — Filter missing year → 422",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('422', () => pm.response.to.have.status(422));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"month\": 5 }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+            }
+          ]
+        },
+        {
+          "name": "E — Extended coverage",
+          "item": [
+            {
+              "name": "E-1 — Tracking filter by year",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "const y = String(pm.environment.get('current_year'));",
+                "pm.response.json().items.forEach(m => pm.expect(m.month).to.match(new RegExp('^' + y)));"
+              ]}}],
+              "request": { "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/cra-tracking/months?year={{current_year}}&page=1&limit=10", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months"], "query": [{ "key": "year", "value": "{{current_year}}" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }}
+            },
+            {
+              "name": "E-2 — Tracking filter by month",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "pm.response.json().items.forEach(m => pm.expect(m.month).to.match(/-01$/));"
+              ]}}],
+              "request": { "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/cra-tracking/months?month=1&page=1&limit=10", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months"], "query": [{ "key": "month", "value": "1" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }}
+            },
+            {
+              "name": "E-3 — Tracking page=9999 → empty",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "pm.expect(pm.response.json().items).to.be.an('array').with.lengthOf(0);"
+              ]}}],
+              "request": { "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/api/cra-tracking/months?page=9999&limit=10", "host": ["{{base_url}}"], "path": ["api", "cra-tracking", "months"], "query": [{ "key": "page", "value": "9999" }, { "key": "limit", "value": "10" }] }}
+            },
+            {
+              "name": "E-4 — Filter billable=true",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "pm.response.json().items.forEach(x => pm.expect(x.billable_to_client).to.equal(true));"
+              ]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"billable\": true, \"page\": 1, \"limit\": 10 }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+            },
+            {
+              "name": "E-5 — Filter status=Pending",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "pm.response.json().items.forEach(x => pm.expect(x.status).to.equal('Pending'));"
+              ]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"status\": \"Pending\", \"page\": 1, \"limit\": 10 }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+            },
+            {
+              "name": "E-6 — Filter limit=1",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.expect(j.items).to.have.lengthOf.at.most(1);",
+                "pm.expect(j.limit).to.equal(1);"
+              ]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{ \"year\": {{current_year}}, \"page\": 1, \"limit\": 1 }", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/expenses/filter", "host": ["{{base_url}}"], "path": ["api", "expenses", "filter"] }}
+            },
+            {
+              "name": "E-7a — Travail/HNO → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"HNO\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "E-7b — Travail/Astreinte → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Travail\",\n  \"activity\": \"Astreinte\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "E-8a — Absence/RTT → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Absence\",\n  \"activity\": \"RTT\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "E-8b — Absence/Maladie → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Absence\",\n  \"activity\": \"Maladie\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "E-8c — Absence/Sans solde → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Absence\",\n  \"activity\": \"Sans solde\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "E-8d — Absence/Autre → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"categorie\": \"Absence\",\n  \"activity\": \"Autre\",\n  \"start_date\": \"{{today}}\",\n  \"end_date\": \"{{today}}\",\n  \"all_day\": true,\n  \"nb\": 1.0\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/api/cra/events", "host": ["{{base_url}}"], "path": ["api", "cra", "events"] }}
+            },
+            {
+              "name": "E-9a — Expense Telephonie → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Telephonie", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "25.00", "type": "text" },
+                  { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "E-9b — Expense Teletravail → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Teletravail", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "15.00", "type": "text" },
+                  { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "E-9c — Expense Materiel → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Materiel", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "120.00", "type": "text" },
+                  { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "E-9d — Expense Autre → 201",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]}}],
+              "request": { "method": "POST", "header": [],
+                "body": { "mode": "formdata", "formdata": [
+                  { "key": "type", "value": "Autre", "type": "text" },
+                  { "key": "month", "value": "{{current_month}}", "type": "text" },
+                  { "key": "total_amount", "value": "10.00", "type": "text" },
+                  { "key": "receipt", "type": "file", "src": "apidog/fixtures/sample_receipt.pdf" }
+                ]},
+                "url": { "raw": "{{base_url}}/api/expenses", "host": ["{{base_url}}"], "path": ["api", "expenses"] }}
+            },
+            {
+              "name": "E-10 — Healthz",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('200', () => pm.response.to.have.status(200));",
+                "pm.expect(pm.response.json().status).to.equal('ok');"
+              ]}}],
+              "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [],
+                "url": { "raw": "{{base_url}}/healthz", "host": ["{{base_url}}"], "path": ["healthz"] }}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

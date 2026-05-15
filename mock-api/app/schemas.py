@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Generic, Optional, TypeVar
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 from app.enums import CraActivity, CraCategory, ExpenseType, Status, UserRole
 
@@ -9,7 +9,7 @@ from app.enums import CraActivity, CraCategory, ExpenseType, Status, UserRole
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
@@ -20,7 +20,7 @@ class TokenResponse(BaseModel):
 
 class UserOut(BaseModel):
     id: int
-    email: EmailStr
+    email: str
     full_name: str
     role: UserRole
 
@@ -99,12 +99,12 @@ class CraMonthOut(BaseModel):
 
 class NoteFraisFilter(BaseModel):
     year: int
-    month: Optional[int] = None  # 1..12
+    month: Optional[int] = Field(default=None, ge=1, le=12)
     status: Optional[Status] = None
     type: Optional[ExpenseType] = None
     billable: Optional[bool] = None
-    page: int = 1
-    limit: int = 10
+    page: int = Field(default=1, ge=1)
+    limit: int = Field(default=10, ge=1, le=100)
 
 
 class NoteFraisUpdate(BaseModel):
