@@ -22,6 +22,8 @@ from schemas import (
 
 logger = logging.getLogger(__name__)
 
+MAX_SIZE = 10 * 1024 * 1024
+
 
 def _base_url() -> str:
     return os.getenv("PORTALITE_BASE_URL", "http://localhost:8005")
@@ -61,6 +63,16 @@ async def _submit_one_expense(
 
     receipt_path = Path(expense.receipt_path) if expense.receipt_path else None
 
+    if receipt_path and receipt_path.exists() and receipt_path.stat().st_size > MAX_SIZE:
+        return ExpenseResult(
+            index=index,
+            description=expense.description,
+            total_amount=expense.total_amount,
+            status="failed",
+            error=f"File too large: {receipt_path.stat().st_size // 1024 // 1024}MB (max 10MB)",
+            receipt_uploaded=False,
+        )
+
     try:
         if receipt_path and receipt_path.exists():
             mime, _ = mimetypes.guess_type(str(receipt_path))
@@ -80,6 +92,7 @@ async def _submit_one_expense(
                 total_amount=expense.total_amount,
                 status="failed",
                 error=f"Justificatif introuvable : '{expense.receipt_path}'",
+                receipt_uploaded=False,
             )
         else:
             resp = await client.post(
@@ -96,6 +109,7 @@ async def _submit_one_expense(
                 total_amount=expense.total_amount,
                 status="ok",
                 expense_id=resp.json().get("id"),
+                receipt_uploaded=receipt_path is not None and receipt_path.exists(),
             )
         return ExpenseResult(
             index=index,
@@ -103,6 +117,7 @@ async def _submit_one_expense(
             total_amount=expense.total_amount,
             status="failed",
             error=f"HTTP {resp.status_code} : {resp.text[:300]}",
+            receipt_uploaded=False,
         )
 
     except httpx.TimeoutException:
@@ -112,6 +127,7 @@ async def _submit_one_expense(
             total_amount=expense.total_amount,
             status="failed",
             error="Timeout",
+            receipt_uploaded=False,
         )
     except Exception as exc:
         logger.exception("Erreur inattendue note de frais %d", index)
@@ -121,6 +137,7 @@ async def _submit_one_expense(
             total_amount=expense.total_amount,
             status="failed",
             error=str(exc),
+            receipt_uploaded=False,
         )
 
 
@@ -247,7 +264,7 @@ async def run_submission(
                     for i, ev in enumerate(submission.cra_events)
                 ],
                 cra_month=CraMonthResult(status="failed", error=err),
-                summary="Authentification echouee - rien n'a ete soumis.",
+                summary="Authentication failed - nothing was submitted.",
             )
 
         expense_results: list[ExpenseResult] = []
@@ -278,7 +295,7 @@ async def run_submission(
         parts.append(f"CRA {cra_month_result.month} submitted")
     elif cra_month_result.status == "failed":
         parts.append(f"CRA month failed, why: {cra_month_result.error}")
-        
+
     return SubmissionReport(
         expenses_total=len(submission.expenses),
         expenses_submitted=n_exp_ok,
@@ -289,5 +306,5 @@ async def run_submission(
         expenses=expense_results,
         cra_events=event_results,
         cra_month=cra_month_result,
-        summary=" | ".join(parts) if parts else "Rien a soumettre.",
+        summary=" | ".join(parts) if parts else "Nothing to submit.",
     )

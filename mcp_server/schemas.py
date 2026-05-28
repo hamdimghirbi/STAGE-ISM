@@ -87,6 +87,7 @@ class ExpenseResult(BaseModel):
     status: str
     expense_id: Optional[int] = None
     error: Optional[str] = None
+    receipt_uploaded: Optional[bool] = None
 
 
 class CraEventResult(BaseModel):
