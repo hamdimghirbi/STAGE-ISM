@@ -1,3 +1,12 @@
+"""End-to-end tests for the MCP connector against the mock Portalite API.
+
+These tests require the mock-api to be running on port 8005:
+    cd mock-api && uv run python -m uvicorn app.main:app --reload --port 8005
+
+Each test calls run_submission() directly (bypassing FastMCP) and verifies
+that the data actually lands in the Portalite database.
+"""
+
 from __future__ import annotations
 import os, sys
 from pathlib import Path
@@ -18,6 +27,7 @@ PASSWORD = os.getenv("PORTALITE_PASSWORD", "demo1234")
 pytestmark = pytest.mark.asyncio
 
 
+# Check whether the mock API is reachable before running live integration tests.
 async def _api_disponible() -> bool:
     try:
         async with httpx.AsyncClient() as c:
@@ -28,6 +38,8 @@ async def _api_disponible() -> bool:
 
 
 @pytest.mark.asyncio
+# Verify that mileage expenses can be submitted without a receipt.
+# INDEMNITES_KM is the only type that does not require a receipt file.
 async def test_km_sans_recu():
     if not await _api_disponible():
         pytest.skip("Mock-API non accessible")
@@ -44,6 +56,8 @@ async def test_km_sans_recu():
 
 
 @pytest.mark.asyncio
+# Verify that restaurant expenses submit correctly when a receipt file is provided.
+# Creates a temporary PDF file and verifies it gets uploaded (receipt_path in DB is not null).
 async def test_restauration_avec_recu(tmp_path):
     if not await _api_disponible():
         pytest.skip("Mock-API non accessible")
@@ -63,6 +77,8 @@ async def test_restauration_avec_recu(tmp_path):
 
 
 @pytest.mark.asyncio
+# Verify that a CRA event can be submitted successfully.
+# Submits one week of work (Travail/Prestation) and checks the event_id is returned.
 async def test_cra_event():
     if not await _api_disponible():
         pytest.skip("Mock-API non accessible")
@@ -79,6 +95,11 @@ async def test_cra_event():
 
 
 @pytest.mark.asyncio
+# Verify a complete monthly submission with both expenses and CRA items.
+# This is the realistic end-of-month scenario:
+# - 2 expenses (one KM, one transport with receipt)
+# - 2 CRA events (one work week + one leave day)
+# - Monthly declaration
 async def test_workflow_mensuel_complet(tmp_path):
     if not await _api_disponible():
         pytest.skip("Mock-API non accessible")
@@ -113,6 +134,8 @@ async def test_workflow_mensuel_complet(tmp_path):
 
 
 @pytest.mark.asyncio
+# Verify that invalid credentials result in a clean authentication failure.
+# Nothing should be submitted and the error message should mention authentication.
 async def test_mauvais_credentials():
     if not await _api_disponible():
         pytest.skip("Mock-API non accessible")
@@ -129,6 +152,9 @@ async def test_mauvais_credentials():
 
 
 @pytest.mark.asyncio
+# Verify that partial submission failures do not stop the remaining items.
+# Simulates a failure on the 2nd expense using monkeypatch.
+# Expenses A and C should succeed; B should fail.
 async def test_echec_partiel_continue(monkeypatch):
     if not await _api_disponible():
         pytest.skip("Mock-API non accessible")

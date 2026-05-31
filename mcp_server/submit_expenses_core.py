@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Core submission logic for posting expenses and CRA data to the Portalite API."""
+
 import logging
 import mimetypes
 import os
@@ -25,14 +27,17 @@ logger = logging.getLogger(__name__)
 MAX_SIZE = 10 * 1024 * 1024
 
 
+# Return the configured Portalite API base URL.
 def _base_url() -> str:
     return os.getenv("PORTALITE_BASE_URL", "http://localhost:8005")
 
 
+# Return the default request timeout for Portalite API calls.
 def _timeout() -> float:
     return float(os.getenv("PORTALITE_TIMEOUT", "30"))
 
 
+# Authenticate with Portalite and return a bearer token.
 async def _login(client: httpx.AsyncClient, email: str, password: str) -> str:
     resp = await client.post(
         "/api/auth/login",
@@ -44,6 +49,7 @@ async def _login(client: httpx.AsyncClient, email: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
+# Submit a single expense item to the Portalite expenses endpoint.
 async def _submit_one_expense(
     client: httpx.AsyncClient,
     token: str,
@@ -141,6 +147,7 @@ async def _submit_one_expense(
         )
 
 
+# Submit a single CRA event to the Portalite CRA events endpoint.
 async def _submit_one_cra_event(
     client: httpx.AsyncClient,
     token: str,
@@ -194,6 +201,7 @@ async def _submit_one_cra_event(
         )
 
 
+# Submit CRA month summary data if a month submission is provided.
 async def _submit_cra_month(
     client: httpx.AsyncClient,
     token: str,
@@ -235,6 +243,7 @@ async def _submit_cra_month(
         return CraMonthResult(status="failed", month=cra_month.month, error=str(exc))
 
 
+# Run the full submission flow: login, submit expenses, CRA events, and CRA month.
 async def run_submission(
     submission: ConfirmedSubmission,
     email: str,
