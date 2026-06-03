@@ -3,6 +3,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastmcp.server.openapi import OpenAPITool
+import httpx
+from fastmcp.server.openapi import RouteMap, RouteType
+import jsonref
+
+import json
+from mcp.types import TextContent
+from fastmcp.server.openapi import FastMCPOpenAPI
+
 from fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
 from starlette.requests import Request
@@ -61,16 +70,73 @@ def get_enums() -> dict:
         'statuses': [s.value for s in Status],
     }
 
-# MCP Server mounted on /mcp
-from fastmcp import FastMCP
 
-mcp = FastMCP(name="portalite-mock-api")
-# Health check tool
+
+
+# Token storage — cannot use a simple variable in async, dict content can be modified
+_token = {"value": ""}
+
+
+# Injects JWT token automatically into every request
+# Without this, all tools would get 401 Unauthorized
+class DynamicAuthTransport(httpx.AsyncBaseTransport):
+    def __init__(self, app):
+        self._transport = httpx.ASGITransport(app=app)
+    async def handle_async_request(self, request):
+        if _token["value"]:
+            request.headers["Authorization"] = f"Bearer {_token['value']}"
+        return await self._transport.handle_async_request(request)
+
+
+# Patch OpenAPITool to wrap results in TextContent
+original_execute = OpenAPITool._execute_request
+
+async def patched_execute_request(self, *args, **kwargs):
+    result = await original_execute(self, *args, **kwargs)
+    if isinstance(result, (dict, list)):
+        return json.dumps(result)
+    return result
+
+OpenAPITool._execute_request = patched_execute_request
+
+
+# All tools use this client — token injected automatically
+http_client = httpx.AsyncClient(
+    transport=DynamicAuthTransport(app),
+    base_url="http://fastapi"
+)
+
+
+# Auto-generate all tools from FastAPI OpenAPI spec
+# jsonref resolves $ref, exclude_operations removes auto-generated login
+# route_maps forces GET routes to be tools instead of resources
+mcp = FastMCP.from_openapi(
+    openapi_spec=jsonref.replace_refs(app.openapi()),
+    client=http_client,
+    exclude_operations=["login_api_auth_login_post"],
+    route_maps=[
+        RouteMap(methods=["GET", "POST", "PUT", "DELETE"], pattern=".*", route_type=RouteType.TOOL)
+    ]
+)
+
+
+# Manual login — from_openapi does not support OAuth2 form data
+# Stores token so DynamicAuthTransport injects it automatically after login
 @mcp.tool()
-def health() -> dict:
-    """Verifie que le serveur tourne."""
-    return {"status": "ok"}
+async def login(email: str, password: str) -> str:
+    """Login to Portalite and get JWT token. Always call this first."""
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://fastapi"
+    ) as client:
+        resp = await client.post(
+            "/api/auth/login",
+            data={"username": email, "password": password}
+        )
+        result = resp.json()
+        _token["value"] = result["access_token"]
+        return json.dumps(result)
 
 
-# Mount MCP on FastAPI via SSE — connect on http://localhost:8005/mcp/sse
+# Mount MCP on FastAPI via SSE
 app.mount("/mcp", mcp.sse_app())
