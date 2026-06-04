@@ -137,6 +137,7 @@ async def login(email: str, password: str) -> str:
         _token["value"] = result["access_token"]
         return json.dumps(result)
 
-
+# Rename tool that exceeds 64 characters limit required by Claude Desktop
+mcp._tool_manager._tools["import_client_cra"] = mcp._tool_manager._tools.pop("import_client_cra_api_cra_tracking_months__month__import_client_cra_post")
 # Mount MCP on FastAPI via SSE
 app.mount("/mcp", mcp.sse_app())
