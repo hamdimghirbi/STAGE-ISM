@@ -66,6 +66,18 @@ class CraMonthSubmit(BaseModel):
     reserve_use_days: float = Field(default=0.0, ge=0)
     reserve_save_eur: float = Field(default=0.0, ge=0)
     reserve_save_days: float = Field(default=0.0, ge=0)
+    days_worked: float = Field(default=0.0, ge=0, le=23)
+    leave_days: float = Field(default=0.0, ge=0)
+    public_holidays: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_days(self) -> "CraMonthSubmit":
+        total = self.days_worked + self.leave_days + self.public_holidays
+        if total > 23:
+            raise ValueError(
+                f"Total days ({total}) exceeds maximum working days in a month (23)."
+            )
+        return self
 
 
 class ConfirmedSubmission(BaseModel):
