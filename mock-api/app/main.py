@@ -3,6 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastmcp import FastMCP
+from mcp.server.sse import SseServerTransport
+from starlette.requests import Request
+
 from app.config import settings
 from app.db import create_db_and_tables
 from app.enums import ACTIVITY_BY_CATEGORY, CraCategory, ExpenseType, Status
@@ -56,3 +60,17 @@ def get_enums() -> dict:
         'expense_types': [t.value for t in ExpenseType],
         'statuses': [s.value for s in Status],
     }
+
+# MCP Server mounted on /mcp
+from fastmcp import FastMCP
+
+mcp = FastMCP(name="portalite-mock-api")
+# Health check tool
+@mcp.tool()
+def health() -> dict:
+    """Verifie que le serveur tourne."""
+    return {"status": "ok"}
+
+
+# Mount MCP on FastAPI via SSE — connect on http://localhost:8005/mcp/sse
+app.mount("/mcp", mcp.sse_app())
